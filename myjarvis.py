@@ -1,5 +1,5 @@
 """
-Jarvis2 -- Ultimate & Complete Version (With Hidden Key Support & Fixed Export)
+Jarvis 2.0 -- Ultimate Version (With Fixed Audio Player & Grand Welcome)
 ---------------------------------------------------------------------------------
 Run with:
     streamlit run myjarvis.py
@@ -11,7 +11,7 @@ import os
 import streamlit as st
 
 st.set_page_config(
-    page_title="Jarvis2",
+    page_title="Jarvis 2.0",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -50,8 +50,8 @@ st.markdown(
 # ---------------------------------------------------------------------------
 # GEMINI LLM BACKEND FUNCTIONS
 # ---------------------------------------------------------------------------
-# री-चेक किया हुआ: यहाँ से रटी हुई पुरानी तारीख हटा दी गई है, जिससे बग फिक्स हो गया!
 JARVIS_SYSTEM_PROMPT = """You are Jarvis, a warm, sharp, and direct AI assistant.
+Your name is Jarvis 2.0.
 Tone: speak like a grounded, intelligent peer -- warm, occasionally witty.
 Formatting: use clear structure -- short paragraphs, bullet points for lists.
 Use the Google Search tool for all queries related to real-time events, current dates, time, match scores, or news.
@@ -78,7 +78,7 @@ def call_gemini(client, prompt, model="gemini-2.5-flash"):
             config=types.GenerateContentConfig(
                 system_instruction=JARVIS_SYSTEM_PROMPT,
                 temperature=0.7,
-                tools=[{"google_search": {}}], # लाइव सर्च टूल
+                tools=[{"google_search": {}}],
             ),
         )
         return response.text, None
@@ -92,14 +92,14 @@ def text_to_speech_bytes(text, lang="en"):
     try:
         from gtts import gTTS
         cleaned = re.sub(r"\*\*|\*|__|_|#+\s?|`|http\S+", "", text).strip()
-        if not cleaned: return None, "Nothing to speak."
-        tts = gTTS(text=cleaned[:3000], lang=lang)
+        if not cleaned: return None
+        tts = gTTS(text=cleaned[:1500], lang=lang)
         buffer = io.BytesIO()
         tts.write_to_fp(buffer)
         buffer.seek(0)
-        return buffer.read(), None
-    except Exception as e:
-        return None, f"Voice synthesis failed: {e}"
+        return buffer.read()
+    except Exception:
+        return None
 
 # ---------------------------------------------------------------------------
 # LOCAL FALLBACK RESEARCH ENGINE
@@ -187,8 +187,8 @@ with st.sidebar:
 
     st.markdown("---")
     
-    # वॉइस टॉगल बटन
-    voice_toggle = st.toggle("Speak responses aloud", key="voice_toggle")
+    # वॉइस स्विच
+    voice_toggle = st.toggle("Enable Voice System (Speaker)", key="voice_toggle", value=True)
 
     st.markdown("---")
     
@@ -228,26 +228,27 @@ if clear_chat:
     st.session_state.messages = []
     st.rerun()
 
+# नया और बदला हुआ वेलकम कार्ड (Welcome to Jarvis 2.0)
 st.markdown(
     """
     <div class="jarvis-card">
-    <span class="jarvis-tag">JARVIS2 · ONLINE</span>
-    <h2 style="margin-top:6px;">🤖 Jarvis2</h2>
+    <span class="jarvis-tag">JARVIS 2.0 · ONLINE</span>
+    <h2 style="margin-top:6px;">🤖 Welcome to Jarvis 2.0</h2>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-# Render Chat Messages
+# चैट मैसेजेस को स्क्रीन पर रेंडर करना
 for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-        # री-चेक किया हुआ: पुरानी मैसेजेस के साथ अगर ऑडियो जनरेट हुआ था, तो उसे भी स्क्रीन पर दिखाना
-        if message["role"] == "assistant" and "audio_bytes" in message:
-            if message["audio_bytes"]:
-                st.audio(message["audio_bytes"], format="audio/mp3")
+        # पुराना ऑडियो रेंडर करना (ताकि गायब न हो)
+        if message["role"] == "assistant" and voice_toggle and "audio" in message:
+            if message["audio"]:
+                st.audio(message["audio"], format="audio/mp3")
 
-# Chat Input Logic
+# चैट इनपुट लॉजिक
 if prompt := st.chat_input("Ask me anything..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -258,12 +259,16 @@ if prompt := st.chat_input("Ask me anything..."):
             response = route_message(prompt, gemini_client, selected_model)
         st.markdown(response)
         
-        # री-चेक किया हुआ: वॉइस टॉगल ऑन होने पर ऑडियो जेनरेट करना और प्लेयर दिखाना
-        audio_bytes = None
+        # तुरंत न्यू ऑडियो जेनरेट करना
+        audio_data = None
         if voice_toggle:
-            audio_bytes, audio_err = text_to_speech_bytes(response)
-            if audio_bytes:
-                st.audio(audio_bytes, format="audio/mp3")
+            audio_data = text_to_speech_bytes(response)
+            if audio_data:
+                st.audio(audio_data, format="audio/mp3")
                 
-    st.session_state.messages.append({"role": "assistant", "content": response, "audio_bytes": audio_bytes})
-    st.rerun()
+    # मैसेज हिस्ट्री में डेटा डालना (रिरन हटा दिया गया है ताकि प्लेयर टिका रहे)
+    st.session_state.messages.append({
+        "role": "assistant", 
+        "content": response, 
+        "audio": audio_data
+    })
