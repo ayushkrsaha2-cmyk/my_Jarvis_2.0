@@ -50,9 +50,12 @@ st.markdown(
 # ---------------------------------------------------------------------------
 # GEMINI LLM BACKEND FUNCTIONS
 # ---------------------------------------------------------------------------
+# यहाँ हमने जार्विस को हमेशा के लिए आज की सही तारीख (27 जून 2026) याद दिला दी है!
 JARVIS_SYSTEM_PROMPT = """You are Jarvis, a warm, sharp, and direct AI assistant.
+Your name is Jarvis. Today's date is Saturday, June 27, 2026. 
 Tone: speak like a grounded, intelligent peer -- warm, occasionally witty.
 Formatting: use clear structure -- short paragraphs, bullet points for lists.
+Use the Google Search tool for all queries related to real-time events, current dates, match scores, or news.
 """
 
 def get_gemini_client(api_key):
@@ -76,6 +79,7 @@ def call_gemini(client, prompt, model="gemini-2.5-flash"):
             config=types.GenerateContentConfig(
                 system_instruction=JARVIS_SYSTEM_PROMPT,
                 temperature=0.7,
+                tools=[{"google_search": {}}], # यहाँ लाइव गूगल सर्च टूल चालू कर दिया गया है!
             ),
         )
         return response.text, None
@@ -141,8 +145,13 @@ def route_message(text, gemini_client, model="gemini-2.5-flash"):
 with st.sidebar:
     st.title("⚙️ Settings")
     
-    # Check for Online Hidden Global Key
-    GLOBAL_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+    # अब यह सीधे Streamlit Secrets (तिजोरी) या पर्यावरण से चाबी चेक करेगा
+    GLOBAL_API_KEY = ""
+    if "GEMINI_API_KEY" in st.secrets:
+        GLOBAL_API_KEY = st.secrets["GEMINI_API_KEY"]
+    else:
+        GLOBAL_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+        
     gemini_client = None
     
     if GLOBAL_API_KEY:
@@ -152,7 +161,7 @@ with st.sidebar:
         else:
             st.error(f"Global Key Error: {client_error}")
     else:
-        # If no global key (like on your local PC), show the input box
+        # अगर लोकल पीसी पर चलाओगे और तिजोरी खाली होगी, तभी ये इनपुट बॉक्स दिखेगा
         api_key_input = st.text_input(
             "Google Gemini API Key",
             type="password",
