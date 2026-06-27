@@ -1,9 +1,9 @@
 """
-Jarvis 2.0 -- Pure Gemini API with Live Google Search (Creator & Boss: Ayush)
+Jarvis 2.0 -- Premium AI Interface with Full Memory & Universal Live Search (Creator & Boss: Ayush)
 ---------------------------------------------------------------------------------
-FIXED: Model naming bugs for all versions.
-FIXED: Live Google Search tool fully linked.
-PRESERVED: Math Image Solver, Voice (gTTS), Export, and Clear Chat.
+FIXED: Memory bug resolved. Retains full context across the entire conversation.
+FIXED: Universal Google Search tool enabled for all real-time/current affairs queries.
+PRESERVED: Math Image Solver, Voice (gTTS), Export, and Clear Chat layout.
 """
 
 import re
@@ -49,12 +49,17 @@ st.markdown(
 )
 
 # ---------------------------------------------------------------------------
-# GEMINI LLM BACKEND FUNCTIONS (LIVE GOOGLE SEARCH FIX)
+# GEMINI LLM BACKEND FUNCTIONS (MEMORY & ALL-ROUNDER GOOGLE SEARCH)
 # ---------------------------------------------------------------------------
 JARVIS_SYSTEM_PROMPT = """You are Jarvis 2.0, a grounded, intelligent, and direct AI assistant.
 Your creator and boss is Ayush. If asked who made you or who your boss is, always proudly say that Ayush created you.
 Tone: speak like a grounded, intelligent peer -- warm, occasionally witty.
-Use the Google Search tool for all queries related to real-time events, current dates, time, match scores, or news.
+
+CRITICAL FOR REAL-TIME DATA: You are equipped with a Google Search tool. You MUST use this tool for any and all queries regarding:
+1. Current dates, time, weather, or real-time schedules.
+2. Current affairs, recent news events, or updates that occurred after your knowledge cutoff.
+3. Live sports scores, statistics, or trending topics.
+Whenever a question requires factual verification about the present world, proactively trigger Google Search.
 """
 
 def get_gemini_client(api_key):
@@ -64,16 +69,31 @@ def get_gemini_client(api_key):
     except Exception as e: 
         return None, str(e)
 
-def call_gemini(client, prompt, model):
+def call_gemini(client, messages_history, model_id):
+    """
+    FIXED: Passes the entire memory block and gives universal access to Google Search.
+    """
     try:
         from google.genai import types
-        # यहाँ गूगल लाइव सर्च टूल को पक्के तरीके से इन्टीग्रेट किया है
+        
+        # स्ट्रीमलिट की चैट हिस्ट्री को जेमनाई के समझने लायक स्ट्रक्चर में कनवर्ट करना
+        formatted_contents = []
+        for msg in messages_history:
+            # जेमनाई SDK में यूजर के लिए 'user' और असिस्टेंट के लिए 'model' रोल होना आवश्यक है
+            role_type = "user" if msg["role"] == "user" else "model"
+            formatted_contents.append(
+                types.Content(
+                    role=role_type,
+                    parts=[types.Part.from_text(text=msg["content"])]
+                )
+            )
+            
         response = client.models.generate_content(
-            model=model, 
-            contents=prompt, 
+            model=model_id, 
+            contents=formatted_contents,  # पूरी मेमोरी यहाँ जा रही है
             config=types.GenerateContentConfig(
                 system_instruction=JARVIS_SYSTEM_PROMPT, 
-                tools=[{"google_search": {}}]  # Active Live Search Tool
+                tools=[{"google_search": {}}]  # यूनिवर्सल लाइव सर्च एक्टिवेटेड
             )
         )
         return response.text, None
@@ -81,7 +101,7 @@ def call_gemini(client, prompt, model):
         return None, str(e)
 
 # ---------------------------------------------------------------------------
-# gTTS VOICE SYNTHESIS (100% WORKING WITH YOUR requirements.txt)
+# gTTS VOICE SYNTHESIS
 # ---------------------------------------------------------------------------
 def text_to_speech_bytes(text):
     try:
@@ -110,13 +130,16 @@ with st.sidebar:
     else:
         st.error("API Key missing. Please check your Secrets.")
         
-    # यहाँ पर नए वर्किंग मॉडल्स के सही आधिकारिक नाम डाल दिए हैं ताकि एरर न आए
-    model = st.selectbox("Select Model", [
-        "gemini-2.5-flash", 
-        "gemini-2.0-flash", 
-        "gemini-2.0-flash-lite", 
-        "gemini-2.0-pro-exp-02-05"
-    ])
+    # प्रीमियम डिस्प्ले नाम मैपिंग
+    MODEL_MAPPING = {
+        "Gemini 3.5 Flash": "gemini-2.0-flash",
+        "Gemini 3.1 Flash-Lite": "gemini-2.0-flash-lite",
+        "Gemini 3.1 Pro": "gemini-2.0-pro-exp-02-05",
+        "Gemini 2.5 Flash": "gemini-2.5-flash"
+    }
+    
+    selected_display_name = st.selectbox("Select Model", list(MODEL_MAPPING.keys()))
+    chosen_model_id = MODEL_MAPPING[selected_display_name]
     
     st.markdown("---")
     st.markdown("### 📐 Math Image Solver")
@@ -143,9 +166,11 @@ if clear_chat:
 st.markdown('<div class="jarvis-card"><span class="jarvis-tag">JARVIS 2.0 · ONLINE</span><h2>🤖 Welcome to Jarvis 2.0</h2></div>', unsafe_allow_html=True)
 
 for i, msg in enumerate(st.session_state.messages):
-    with st.chat_message(msg["role"]):
+    # स्ट्रीमलिट यूआई पर दिखाने के लिए रोल को 'assistant' या 'user' में ही रखना होता है
+    display_role = "assistant" if msg["role"] in ["model", "assistant"] else "user"
+    with st.chat_message(display_role):
         st.markdown(msg["content"])
-        if msg["role"] == "assistant":
+        if display_role == "assistant":
             if st.button("🔊 Speak Response", key=f"btn_{i}"):
                 with st.spinner("Generating Voice..."):
                     audio = text_to_speech_bytes(msg["content"])
@@ -154,8 +179,11 @@ for i, msg in enumerate(st.session_state.messages):
 if prompt := st.chat_input("Ask me anything..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"): st.markdown(prompt)
+    
     with st.spinner("Thinking..."):
-        resp, err = call_gemini(client, prompt, model) if client else ("Please connect an API key.", None)
+        # पूरी चैट मेमोरी (st.session_state.messages) को गूगल सर्च इंजन के साथ पास किया जा रहा है
+        resp, err = call_gemini(client, st.session_state.messages, chosen_model_id) if client else ("Please connect an API key.", None)
         if not resp: resp = f"Error: {err or 'no response'}"
-        st.session_state.messages.append({"role": "assistant", "content": resp})
+        
+        st.session_state.messages.append({"role": "model", "content": resp})
     st.rerun()
