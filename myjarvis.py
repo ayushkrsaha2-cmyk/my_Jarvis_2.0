@@ -50,12 +50,11 @@ st.markdown(
 # ---------------------------------------------------------------------------
 # GEMINI LLM BACKEND FUNCTIONS
 # ---------------------------------------------------------------------------
-# यहाँ हमने जार्विस को हमेशा के लिए आज की सही तारीख (27 जून 2026) याद दिला दी है!
+# री-चेक किया हुआ: यहाँ से रटी हुई पुरानी तारीख हटा दी गई है, जिससे बग फिक्स हो गया!
 JARVIS_SYSTEM_PROMPT = """You are Jarvis, a warm, sharp, and direct AI assistant.
-Your name is Jarvis. Today's date is Saturday, June 27, 2026. 
 Tone: speak like a grounded, intelligent peer -- warm, occasionally witty.
 Formatting: use clear structure -- short paragraphs, bullet points for lists.
-Use the Google Search tool for all queries related to real-time events, current dates, match scores, or news.
+Use the Google Search tool for all queries related to real-time events, current dates, time, match scores, or news.
 """
 
 def get_gemini_client(api_key):
@@ -79,7 +78,7 @@ def call_gemini(client, prompt, model="gemini-2.5-flash"):
             config=types.GenerateContentConfig(
                 system_instruction=JARVIS_SYSTEM_PROMPT,
                 temperature=0.7,
-                tools=[{"google_search": {}}], # यहाँ लाइव गूगल सर्च टूल चालू कर दिया गया है!
+                tools=[{"google_search": {}}], # लाइव सर्च टूल
             ),
         )
         return response.text, None
@@ -92,7 +91,7 @@ def call_gemini(client, prompt, model="gemini-2.5-flash"):
 def text_to_speech_bytes(text, lang="en"):
     try:
         from gtts import gTTS
-        cleaned = re.sub(r"\*\*|\*|__|_|#+\s?|`", "", text).strip()
+        cleaned = re.sub(r"\*\*|\*|__|_|#+\s?|`|http\S+", "", text).strip()
         if not cleaned: return None, "Nothing to speak."
         tts = gTTS(text=cleaned[:3000], lang=lang)
         buffer = io.BytesIO()
@@ -145,7 +144,6 @@ def route_message(text, gemini_client, model="gemini-2.5-flash"):
 with st.sidebar:
     st.title("⚙️ Settings")
     
-    # अब यह सीधे Streamlit Secrets (तिजोरी) या पर्यावरण से चाबी चेक करेगा
     GLOBAL_API_KEY = ""
     if "GEMINI_API_KEY" in st.secrets:
         GLOBAL_API_KEY = st.secrets["GEMINI_API_KEY"]
@@ -161,7 +159,6 @@ with st.sidebar:
         else:
             st.error(f"Global Key Error: {client_error}")
     else:
-        # अगर लोकल पीसी पर चलाओगे और तिजोरी खाली होगी, तभी ये इनपुट बॉक्स दिखेगा
         api_key_input = st.text_input(
             "Google Gemini API Key",
             type="password",
@@ -179,7 +176,6 @@ with st.sidebar:
 
     st.markdown("---")
     
-    # Model Picker
     if "gemini_model" not in st.session_state:
         st.session_state.gemini_model = "gemini-2.5-flash"
         
@@ -191,12 +187,11 @@ with st.sidebar:
 
     st.markdown("---")
     
-    # Voice Toggle
+    # वॉइस टॉगल बटन
     voice_toggle = st.toggle("Speak responses aloud", key="voice_toggle")
 
     st.markdown("---")
     
-    # Math Solver
     st.markdown("### 📐 Math Image Solver")
     uploaded_file = st.file_uploader("Upload image", type=["png", "jpg", "jpeg"], key="math_image_uploader")
     run_ocr_clicked = st.button("Run OCR + Solve") if uploaded_file else False
@@ -247,6 +242,10 @@ st.markdown(
 for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        # री-चेक किया हुआ: पुरानी मैसेजेस के साथ अगर ऑडियो जनरेट हुआ था, तो उसे भी स्क्रीन पर दिखाना
+        if message["role"] == "assistant" and "audio_bytes" in message:
+            if message["audio_bytes"]:
+                st.audio(message["audio_bytes"], format="audio/mp3")
 
 # Chat Input Logic
 if prompt := st.chat_input("Ask me anything..."):
@@ -258,5 +257,13 @@ if prompt := st.chat_input("Ask me anything..."):
         with st.spinner("Thinking..."):
             response = route_message(prompt, gemini_client, selected_model)
         st.markdown(response)
-    st.session_state.messages.append({"role": "assistant", "content": response})
+        
+        # री-चेक किया हुआ: वॉइस टॉगल ऑन होने पर ऑडियो जेनरेट करना और प्लेयर दिखाना
+        audio_bytes = None
+        if voice_toggle:
+            audio_bytes, audio_err = text_to_speech_bytes(response)
+            if audio_bytes:
+                st.audio(audio_bytes, format="audio/mp3")
+                
+    st.session_state.messages.append({"role": "assistant", "content": response, "audio_bytes": audio_bytes})
     st.rerun()
