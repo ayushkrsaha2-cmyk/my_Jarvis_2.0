@@ -1,2 +1,5 @@
-google-genai
+google-generativeai
 gTTS
+streamlit
+pytesseract
+Pillow
