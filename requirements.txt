@@ -3,3 +3,4 @@ gTTS
 streamlit
 pytesseract
 Pillow
+ pip install google-genai
